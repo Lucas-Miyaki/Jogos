@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Jogo de Damas</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: sans-serif;
+      margin-top: 20px;
+      background-color: rgba(0, 0, 0, 0.541);
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
+      border: 4px solid #333;
+      margin-bottom: 20px;
+    }
+
+    .cell {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .white {
+      background-color: #f0d9b5;
+    }
+
+    .black {
+      background-color: #b58863;
+    }
+
+    .piece {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .red {
+      background-color: red;
+    }
+
+    .blue {
+      background-color: blue;
+    }
+
+    .king {
+      border: 3px solid gold;
+    }
+
+    h2, h3 {
+      margin: 8px;
+    }
+
+    .counters {
+      display: flex;
+      gap: 20px;
+      font-weight: bold;
+    }
+
+    #gameOver {
+      color: green;
+      font-size: 1.4em;
+      margin-top: 10px;
+    }
+
+    @keyframes pulse {
+    0% {
+        box-shadow: 0 0 8px 2px rgba(255, 255, 0, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 15px 5px rgba(255, 255, 0, 0.7);
+    }
+    100% {
+        box-shadow: 0 0 8px 2px rgba(255, 255, 0, 0.4);
+    }
+    }
+
+    .highlight {
+    outline: 3px solid rgba(255, 255, 0, 0.8);
+    animation: pulse 1.2s infinite ease-in-out;
+    z-index: 1;
+    }
+
+    .selected {
+    box-shadow: 0 0 12px 4px rgba(0, 255, 255, 0.6);
+    animation: pulseSelected 1.2s infinite ease-in-out;
+    z-index: 2;
+    }
+
+    @keyframes pulseSelected {
+    0% {
+        box-shadow: 0 0 8px 3px rgba(0, 255, 255, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 14px 6px rgba(0, 255, 255, 0.7);
+    }
+    100% {
+        box-shadow: 0 0 8px 3px rgba(0, 255, 255, 0.4);
+    }
+    }
+
+  </style>
+</head>
+<body>
+
+  <h2>Jogo de Damas</h2>
+  <a href="./index.html" class="voltar">Voltar</a>
+  <button id="restart">Recomeçar</button>
+  <div class="counters">
+    <div id="redCount">🔴 Vermelho: 12</div>
+    <div id="blueCount">🔵 Azul: 12</div>
+  </div>
+  <div id="board"></div>
+  <h3 id="turn">Vez: Vermelho</h3>
+  <div id="gameOver"></div>
+
+  <script>
+    const board = document.getElementById('board');
+    const turnText = document.getElementById('turn');
+    const redCount = document.getElementById('redCount');
+    const blueCount = document.getElementById('blueCount');
+    const gameOverText = document.getElementById('gameOver');
+
+    let selectedPiece = null;
+    let currentPlayer = 'red';
+    let gameEnded = false;
+
+    const boardState = [];
+
+    function createBoard() {
+        board.innerHTML = '';
+        boardState.length = 0;
+        gameOverText.textContent = '';
+        gameEnded = false;
+
+        for (let row = 0; row < 8; row++) {
+        const rowArr = [];
+        for (let col = 0; col < 8; col++) {
+            const cell = document.createElement('div');
+            cell.classList.add('cell');
+            cell.classList.add((row + col) % 2 === 0 ? 'white' : 'black');
+            cell.dataset.row = row;
+            cell.dataset.col = col;
+            board.appendChild(cell);
+            rowArr.push(null);
+
+            if ((row + col) % 2 !== 0) {
+            if (row < 3) {
+                const piece = createPiece('blue');
+                cell.appendChild(piece);
+                rowArr[col] = piece;
+            } else if (row > 4) {
+                const piece = createPiece('red');
+                cell.appendChild(piece);
+                rowArr[col] = piece;
+            }
+            }
+
+            cell.addEventListener('click', handleCellClick);
+        }
+        boardState.push(rowArr);
+        }
+
+        updatePieceCount();
+    }
+
+    function createPiece(color) {
+        const piece = document.createElement('div');
+        piece.classList.add('piece', color);
+        piece.dataset.color = color;
+        return piece;
+    }
+
+    function mostrarMovimentosValidos(piece, row, col) {
+    limparDestaques();
+    const dirs = piece.classList.contains('king') ? [-1, 1] : [-1];
+    
+    for (let dr of dirs) {
+        for (let dc of [-1, 1]) {
+        const toRow = row + dr;
+        const toCol = col + dc;
+        const capRow = row + 2 * dr;
+        const capCol = col + 2 * dc;
+
+        if (inBounds(toRow, toCol)) {
+            const result = isValidMove({ element: piece, row, col }, toRow, toCol);
+            if (result.valid) {
+            const cell = document.querySelector(`.cell[data-row="${toRow}"][data-col="${toCol}"]`);
+            cell.classList.add('highlight');
+            }
+        }
+
+        if (inBounds(capRow, capCol)) {
+            const result = isValidMove({ element: piece, row, col }, capRow, capCol);
+            if (result.valid && result.capture) {
+            const cell = document.querySelector(`.cell[data-row="${capRow}"][data-col="${capCol}"]`);
+            cell.classList.add('highlight');
+            }
+        }
+        }
+    }
+    }
+
+    function limparDestaques() {
+    document.querySelectorAll('.cell.highlight').forEach(cell => {
+        cell.classList.remove('highlight');
+    });
+    }
+
+    function handleCellClick(e) {
+        if (gameEnded || currentPlayer === 'blue') return;
+
+        const cell = e.currentTarget;
+        const row = parseInt(cell.dataset.row);
+        const col = parseInt(cell.dataset.col);
+        const piece = boardState[row][col];
+
+        if (piece && piece.dataset.color === currentPlayer) {
+        selectedPiece = { element: piece, row, col };
+        mostrarMovimentosValidos(piece, row, col);
+        if (selectedPiece && selectedPiece.element !== piece) {
+        document.querySelectorAll('.piece.selected').forEach(p => p.classList.remove('selected'));
+        }
+
+        selectedPiece = { element: piece, row, col };
+        piece.classList.add('selected');
+
+        mostrarMovimentosValidos(piece, row, col)
+        } else if (selectedPiece) {
+        const valid = isValidMove(selectedPiece, row, col);
+        if (valid.valid) {
+        movePiece(selectedPiece, row, col, valid.capture);
+        if (valid.capture) {
+            executarCapturaHumano(boardState[row][col], row, col);
+        } else {
+            selectedPiece = null;
+            currentPlayer = 'blue';
+            turnText.textContent = 'Vez: Azul (IA)';
+            setTimeout(aiMove, 500);
+        }
+        }
+        }
+    }
+
+    function isValidMove(selected, toRow, toCol) {
+        const { row: fromRow, col: fromCol, element } = selected;
+        const piece = element;
+        const dir = piece.classList.contains('king') ? [1, -1] : (piece.dataset.color === 'red' ? [-1] : [1]);
+
+        for (let d of dir) {
+        for (let dx of [-1, 1]) {
+            const newRow = fromRow + d;
+            const newCol = fromCol + dx;
+
+            if (newRow === toRow && newCol === toCol && boardState[toRow][toCol] === null) {
+            return { valid: true };
+            }
+
+            const capRow = fromRow + 2 * d;
+            const capCol = fromCol + 2 * dx;
+            if (capRow === toRow && capCol === toCol && boardState[toRow][toCol] === null) {
+            const midRow = fromRow + d;
+            const midCol = fromCol + dx;
+            const midPiece = boardState[midRow]?.[midCol];
+            if (midPiece && midPiece.dataset.color !== piece.dataset.color) {
+                return { valid: true, capture: { row: midRow, col: midCol } };
+            }
+            }
+        }
+        }
+        return { valid: false };
+    }
+
+    function movePiece(selected, toRow, toCol, capture) {
+        const { row: fromRow, col: fromCol, element } = selected;
+        const fromCell = document.querySelector(`.cell[data-row="${fromRow}"][data-col="${fromCol}"]`);
+        const toCell = document.querySelector(`.cell[data-row="${toRow}"][data-col="${toCol}"]`);
+
+        fromCell.removeChild(element);
+        toCell.appendChild(element);
+        boardState[fromRow][fromCol] = null;
+        boardState[toRow][toCol] = element;
+
+        if (capture) {
+        const capRow = capture.row;
+        const capCol = capture.col;
+        const capPiece = boardState[capRow][capCol];
+        const capCell = document.querySelector(`.cell[data-row="${capRow}"][data-col="${capCol}"]`);
+        if (capCell && capPiece) {
+            capCell.removeChild(capPiece);
+            boardState[capRow][capCol] = null;
+        }
+        }
+
+        if ((toRow === 0 && element.dataset.color === 'red') ||
+            (toRow === 7 && element.dataset.color === 'blue')) {
+        element.classList.add('king');
+        }
+
+        updatePieceCount();
+
+        if (!gameEnded && currentPlayer === 'blue') {
+        currentPlayer = 'red';
+        turnText.textContent = 'Vez: Vermelho';
+        }
+    }
+
+    function updatePieceCount() {
+        let red = 0;
+        let blue = 0;
+        for (let row of boardState) {
+        for (let piece of row) {
+            if (piece) {
+            if (piece.dataset.color === 'red') red++;
+            if (piece.dataset.color === 'blue') blue++;
+            }
+        }
+        }
+        redCount.textContent = `🔴 Vermelho: ${red};`
+        blueCount.textContent = `🔵 Azul: ${blue};`
+
+        if (red === 0 || blue === 0) {
+        gameEnded = true;
+        gameOverText.textContent = red === 0 ? '🔵 Azul venceu!' : '🔴 Vermelho venceu!';
+        turnText.textContent = 'Fim de jogo';
+        }
+    }
+
+    function avaliarJogada(jogada) {
+        let valor = 0;
+        if (jogada.capture) valor += 10;
+        const toRow = jogada.to.row;
+        const piece = boardState[jogada.from.row][jogada.from.col];
+        
+        if (!piece.classList.contains('king') && toRow === 7) {
+            valor += 5; // promoção para dama
+        }
+
+        return valor;
+    }
+
+    function aiMove() {
+        if (gameEnded) return;
+
+        const moves = [];
+
+        for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+            const piece = boardState[row][col];
+            if (piece && piece.dataset.color === 'blue') {
+            for (let dr of piece.classList.contains('king') ? [-1, 1] : [1]) {
+                for (let dc of [-1, 1]) {
+                let toRow = row + dr;
+                let toCol = col + dc;
+                if (inBounds(toRow, toCol)) {
+                    let result = isValidMove({ element: piece, row, col }, toRow, toCol);
+                    if (result.valid) {
+                    moves.push({ from: { row, col }, to: { row: toRow, col: toCol }, capture: result.capture });
+                    }
+                }
+
+                // Verifica capturas
+                let capRow = row + 2 * dr;
+                let capCol = col + 2 * dc;
+                if (inBounds(capRow, capCol)) {
+                    let result = isValidMove({ element: piece, row, col }, capRow, capCol);
+                    if (result.valid && result.capture) {
+                    moves.unshift({ from: { row, col }, to: { row: capRow, col: capCol }, capture: result.capture }); // prioriza captura
+                    }
+                }
+                }
+            }
+            }
+        }
+        }
+
+        if (moves.length === 0) {
+        gameEnded = true;
+        gameOverText.textContent = '🔴 Vermelho venceu!';
+        turnText.textContent = 'Fim de jogo';
+        return;
+        }
+
+        moves.sort((a, b) => avaliarJogada(b) - avaliarJogada(a));
+        const move = moves[0]
+        const piece = boardState[move.from.row][move.from.col];
+        executarCapturasEncadeadas(move);
+    }
+
+    function executarCapturaHumano(piece, row, col) {
+    const novasCapturas = [];
+    const dirs = piece.classList.contains('king') ? [-1, 1] : [-1];
+
+    for (let dr of dirs) {
+        for (let dc of [-1, 1]) {
+        const capRow = row + 2 * dr;
+        const capCol = col + 2 * dc;
+
+        if (inBounds(capRow, capCol)) {
+            const result = isValidMove({ element: piece, row, col }, capRow, capCol);
+            if (result.valid && result.capture) {
+            novasCapturas.push({
+                from: { row, col },
+                to: { row: capRow, col: capCol },
+                capture: result.capture
+            });
+            }
+        }
+        }
+    }
+
+    if (novasCapturas.length > 0) {
+        selectedPiece = { element: piece, row, col }; // mantém peça selecionada
+        turnText.textContent = '🔴 Continue capturando!';
+    } else {
+        selectedPiece = null;
+        currentPlayer = 'blue';
+        turnText.textContent = 'Vez: Azul (IA)';
+        setTimeout(aiMove, 500);
+    }
+    }
+
+    function executarCapturasEncadeadas(move) {
+    const piece = boardState[move.from.row][move.from.col];
+
+    movePiece(
+        { element: piece, row: move.from.row, col: move.from.col },
+        move.to.row,
+        move.to.col,
+        move.capture
+    );
+
+    // Verifica se ainda pode capturar novamente com a mesma peça
+    const novaRow = move.to.row;
+    const novaCol = move.to.col;
+    const novasCapturas = [];
+
+    const dirs = piece.classList.contains('king') ? [-1, 1] : [-1];
+
+    for (let dr of dirs) {
+        for (let dc of [-1, 1]) {
+        const capRow = novaRow + 2 * dr;
+        const capCol = novaCol + 2 * dc;
+
+        if (inBounds(capRow, capCol)) {
+            let result = isValidMove(
+            { element: piece, row: novaRow, col: novaCol },
+            capRow,
+            capCol
+            );
+            if (result.valid && result.capture) {
+            novasCapturas.push({
+                from: { row: novaRow, col: novaCol },
+                to: { row: capRow, col: capCol },
+                capture: result.capture,
+            });
+            }
+        }
+        }
+    }
+
+    if (novasCapturas.length > 0) {
+        // Se ainda pode capturar, continue a jogada com a melhor captura
+        novasCapturas.sort((a, b) => avaliarJogada(b) - avaliarJogada(a));
+        setTimeout(() => {
+            if (!gameEnded && currentPlayer === 'blue') {
+                executarCapturasEncadeadas(novasCapturas[0]);
+            }
+        }, 400);
+    } else {
+        // Finaliza o turno
+        currentPlayer = 'red';
+        turnText.textContent = 'Vez: Vermelho';
+    }
+    }
+
+    function inBounds(row, col) {
+        return row >= 0 && row < 8 && col >= 0 && col < 8;
+    }
+
+    createBoard();
+
+    restart = document.getElementById('restart')
+    restart.addEventListener('click', () => {
+      location.reload();
+    })
+  </script>
+</body>
+</html>

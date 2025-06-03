@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Xadrez</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: sans-serif;
+      padding: 20px;
+      background-color: rgba(0, 0, 0, 0.541)
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
+      border: 2px solid #333;
+    }
+    .square {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      cursor: pointer;
+    }
+    .white {
+      background-color: #eee;
+    }
+    .black {
+      background-color: #666;
+      color: white;
+    }
+
+    .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    }
+
+    .modal-content {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    font-size: 20px;
+    }
+
+    .modal-content .choices button {
+    font-size: 30px;
+    margin: 10px;
+    padding: 10px 20px;
+    cursor: pointer;
+    }
+
+    .hidden {
+    display: none;
+    }
+
+    .highlight {
+    outline: 3px solid rgb(255, 255, 0);
+    box-sizing: border-box;
+    }
+    
+  </style>
+</head>
+<body>
+  <h1>Xadrez</h1>
+  <a href="./index.html" class="voltar">Voltar</a>
+  <button id="restart">Recomeçar</button>
+  <div>
+    <button onclick="aiDifficulty='easy'">Fácil</button>
+    <button onclick="aiDifficulty='normal'">Médio</button>
+    <button onclick="aiDifficulty='hard'">Difícil</button>
+  </div>
+  <select id="themeSelector">
+    <option value="classic">Clássico (marrom)</option>
+    <option value="blue">Azul</option>
+    <option value="green">Verde</option>
+    <option value="dark">Escuro</option>
+  </select>
+  
+  <div id="board"></div>
+
+  
+
+  <div id="promotion-modal" class="modal hidden">
+    <div class="modal-content">
+        <p>Escolha a peça para promoção:</p>
+        <div class="choices">
+        <button data-piece="dama">♕ / ♛</button>
+        <button data-piece="torre">♖ / ♜</button>
+        <button data-piece="bispo">♗ / ♝</button>
+        <button data-piece="cavalo">♘ / ♞</button>
+        </div>
+    </div>
+   </div>
+   <div id="move-history" style="margin-top: 20px;">
+    <h3>Histórico de Movimentos</h3>
+    <ol id="history-list"></ol>
+   </div>
+
+  <script>
+  const boardElement = document.getElementById("board");
+  let pendingPromotion = null;
+  const modal = document.getElementById("promotion-modal");
+  let whiteKingMoved = false;
+  let blackKingMoved = false;
+  let whiteRookMoved = { h1: false, a1: false };
+  let blackRookMoved = { h8: false, a8: false };
+  let enPassantTarget = null; // { row, col } da casa atrás do peão que andou 2 casas
+  const moveHistory = [];
+
+  const initialBoard = [
+    ["♜", "♞", "♝", "♛", "♚", "♝", "♞", "♜"],
+    ["♟", "♟", "♟", "♟", "♟", "♟", "♟", "♟"],
+    ["", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", ""],
+    ["♙", "♙", "♙", "♙", "♙", "♙", "♙", "♙"],
+    ["♖", "♘", "♗", "♕", "♔", "♗", "♘", "♖"]
+  ];
+
+  let selected = null;
+  let turn = "white";
+
+    const themes = {
+    classic: {
+        whiteBg: "#f0d9b5",
+        blackBg: "#b58863",
+        blackColor: "black"
+    },
+    blue: {
+        whiteBg: "#d0e7f9",
+        blackBg: "#336699",
+        blackColor: "white"
+    },
+    green: {
+        whiteBg: "#d4e7d4",
+        blackBg: "#4a7c4a",
+        blackColor: "white"
+    },
+    dark: {
+        whiteBg: "#555",
+        blackBg: "#222",
+        blackColor: "white"
+    }
+    };
+
+    const themeSelector = document.getElementById("themeSelector");
+
+    themeSelector.addEventListener("change", () => {
+    const theme = themes[themeSelector.value];
+    document.querySelectorAll(".white").forEach(el => {
+        el.style.backgroundColor = theme.whiteBg;
+        el.style.color = "black"; // Peças brancas devem ser visíveis
+    });
+    document.querySelectorAll(".black").forEach(el => {
+        el.style.backgroundColor = theme.blackBg;
+        el.style.color = theme.blackColor;
+    });
+    });
+
+    function toAlgebraic(row, col) {
+    const files = "abcdefgh";
+    return files[col] + (8 - row);
+    }
+
+    function applyTheme() {
+    const theme = themes[themeSelector.value];
+    document.querySelectorAll(".white").forEach(el => {
+        el.style.backgroundColor = theme.whiteBg;
+        el.style.color = "black";
+    });
+    document.querySelectorAll(".black").forEach(el => {
+        el.style.backgroundColor = theme.blackBg;
+        el.style.color = theme.blackColor;
+    });
+    }
+
+    function createBoard() {
+    boardElement.innerHTML = "";
+    for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+        const square = document.createElement("div");
+        square.classList.add("square");
+        square.classList.add((row + col) % 2 === 0 ? "white" : "black");
+        square.dataset.row = row;
+        square.dataset.col = col;
+        square.textContent = initialBoard[row][col];
+
+        square.addEventListener("click", () => {
+            handleClick(row, col);
+        });
+
+        boardElement.appendChild(square);
+        }
+    }
+    applyTheme();
+    }
+
+    function addMoveToHistory(fromRow, fromCol, toRow, toCol, piece, captured) {
+    const from = toAlgebraic(fromRow, fromCol);
+    const to = toAlgebraic(toRow, toCol);
+    let move = `${piece} ${from} → ${to}`;
+    if (captured) move += " (x)";
+    moveHistory.push(move);
+
+    const list = document.getElementById("history-list");
+    const item = document.createElement("li");
+    item.textContent = move;
+    list.appendChild(item);
+    }
+
+  function getPieceColor(piece) {
+    if (["♙", "♖", "♘", "♗", "♕", "♔"].includes(piece)) return "white";
+    if (["♟", "♜", "♞", "♝", "♛", "♚"].includes(piece)) return "black";
+    return null;
+  }
+
+  function isValidMove(fromRow, fromCol, toRow, toCol, piece) {
+    const dr = toRow - fromRow;
+    const dc = toCol - fromCol;
+    const target = initialBoard[toRow][toCol];
+    const targetColor = getPieceColor(target);
+    const color = getPieceColor(piece);
+
+    // Roque
+    if ((piece === "♔" || piece === "♚") && Math.abs(toCol - fromCol) === 2 && fromRow === toRow) {
+    const color = getPieceColor(piece);
+    const kingMoved = color === "white" ? whiteKingMoved : blackKingMoved;
+    const rookMoved = color === "white" ? whiteRookMoved : blackRookMoved;
+    const row = color === "white" ? 7 : 0;
+
+    // Roque pequeno (rei para a direita)
+    if (toCol === 6 && !kingMoved && !rookMoved.h1) {
+        if (
+        !initialBoard[row][5] && !initialBoard[row][6] &&
+        !isInCheck(color) &&
+        !wouldCauseCheck(fromRow, fromCol, row, 5) &&
+        !wouldCauseCheck(fromRow, fromCol, row, 6)
+        ) return true;
+    }
+
+    // Roque grande (rei para a esquerda)
+    if (toCol === 2 && !kingMoved && !rookMoved.a1) {
+        if (
+        !initialBoard[row][1] && !initialBoard[row][2] && !initialBoard[row][3] &&
+        !isInCheck(color) &&
+        !wouldCauseCheck(fromRow, fromCol, row, 3) &&
+        !wouldCauseCheck(fromRow, fromCol, row, 2)
+        ) return true;
+    }
+    }
+
+    // Impede capturar peça da mesma cor
+    if (targetColor === color) return false;
+
+    switch (piece) {
+      case "♙": // Peão branco
+        if (fromRow - 1 === toRow && fromCol === toCol && !target) return true;
+        if (fromRow === 6 && toRow === 4 && fromCol === toCol && !target && !initialBoard[5][fromCol]) return true;
+        if (fromRow - 1 === toRow && Math.abs(fromCol - toCol) === 1) {
+            if (target && getPieceColor(target) === "black") return true;
+            // en passant
+            if (
+            enPassantTarget &&
+            enPassantTarget.row === toRow &&
+            enPassantTarget.col === toCol
+            ) return true;
+        }
+        break;
+      case "♟": // Peão preto
+        if (fromRow + 1 === toRow && fromCol === toCol && !target) return true;
+        if (fromRow === 1 && toRow === 3 && fromCol === toCol && !target && !initialBoard[2][fromCol]) return true;
+        if (fromRow + 1 === toRow && Math.abs(fromCol - toCol) === 1) {
+            if (target && getPieceColor(target) === "white") return true;
+            // en passant
+            if (
+            enPassantTarget &&
+            enPassantTarget.row === toRow &&
+            enPassantTarget.col === toCol
+            ) return true;
+        }
+        break;
+      case "♖": case "♜": // Torre
+        if (dr === 0 || dc === 0) return isPathClear(fromRow, fromCol, toRow, toCol);
+        break;
+      case "♗": case "♝": // Bispo
+        if (Math.abs(dr) === Math.abs(dc)) return isPathClear(fromRow, fromCol, toRow, toCol);
+        break;
+      case "♕": case "♛": // Rainha
+        if ((Math.abs(dr) === Math.abs(dc)) || dr === 0 || dc === 0) return isPathClear(fromRow, fromCol, toRow, toCol);
+        break;
+      case "♘": case "♞": // Cavalo
+        return (Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2);
+      case "♔": case "♚": // Rei
+        return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
+    }
+    return false;
+  }
+
+  function isPathClear(fromRow, fromCol, toRow, toCol) {
+    const stepRow = Math.sign(toRow - fromRow);
+    const stepCol = Math.sign(toCol - fromCol);
+    let r = fromRow + stepRow;
+    let c = fromCol + stepCol;
+    while (r !== toRow || c !== toCol) {
+      if (initialBoard[r][c] !== "") return false;
+      r += stepRow;
+      c += stepCol;
+    }
+    return true;
+  }
+
+  function handleClick(row, col) {
+  const piece = initialBoard[row][col];
+  const pieceColor = getPieceColor(piece);
+
+  if (selected) {
+    const fromRow = selected.row;
+    const fromCol = selected.col;
+    const movingPiece = initialBoard[fromRow][fromCol];
+
+    if (
+      isValidMove(fromRow, fromCol, row, col, movingPiece) &&
+      !wouldCauseCheck(fromRow, fromCol, row, col)
+    ) {
+      // En Passant
+      if (
+        movingPiece === "♙" && fromRow === 3 &&
+        enPassantTarget && enPassantTarget.row === row && enPassantTarget.col === col
+      ) {
+        initialBoard[4][col] = "";
+      } else if (
+        movingPiece === "♟" && fromRow === 4 &&
+        enPassantTarget && enPassantTarget.row === row && enPassantTarget.col === col
+      ) {
+        initialBoard[3][col] = "";
+      }
+
+      // Move a peça
+      initialBoard[row][col] = movingPiece;
+      initialBoard[fromRow][fromCol] = "";
+
+      // Atualiza en passant
+      if (movingPiece === "♙" && fromRow === 6 && row === 4) {
+        enPassantTarget = { row: 5, col };
+      } else if (movingPiece === "♟" && fromRow === 1 && row === 3) {
+        enPassantTarget = { row: 2, col };
+      } else {
+        enPassantTarget = null;
+      }
+
+      // Roque: mover torre
+      if (movingPiece === "♔" && fromRow === 7) {
+        if (fromCol === 4 && col === 6) {
+          initialBoard[7][5] = "♖";
+          initialBoard[7][7] = "";
+        } else if (fromCol === 4 && col === 2) {
+          initialBoard[7][3] = "♖";
+          initialBoard[7][0] = "";
+        }
+      } else if (movingPiece === "♚" && fromRow === 0) {
+        if (fromCol === 4 && col === 6) {
+          initialBoard[0][5] = "♜";
+          initialBoard[0][7] = "";
+        } else if (fromCol === 4 && col === 2) {
+          initialBoard[0][3] = "♜";
+          initialBoard[0][0] = "";
+        }
+      }
+
+      // Atualiza status de rei e torre
+      const fromPos = `${String.fromCharCode(97 + fromCol)}${8 - fromRow}`;
+      if (movingPiece === "♔") whiteKingMoved = true;
+      if (movingPiece === "♚") blackKingMoved = true;
+      if (movingPiece === "♖" && fromPos === "h1") whiteRookMoved.h1 = true;
+      if (movingPiece === "♖" && fromPos === "a1") whiteRookMoved.a1 = true;
+      if (movingPiece === "♜" && fromPos === "h8") blackRookMoved.h8 = true;
+      if (movingPiece === "♜" && fromPos === "a8") blackRookMoved.a8 = true;
+
+      selected = null;
+
+      // Promoção de peão
+      if (
+        (initialBoard[row][col] === "♙" && row === 0) ||
+        (initialBoard[row][col] === "♟" && row === 7)
+      ) {
+        promotePawn(row, col, turn);
+        return;
+      }
+
+      if (isCheckmate(turn === "white" ? "black" : "white")) {
+        alert(`Xeque-mate! Vitória das ${turn === "white" ? "brancas" : "pretas"}!`);
+        boardElement.innerHTML = "<h2>Fim de jogo</h2>";
+        return;
+      }
+
+      if (isInCheck(turn === "white" ? "black" : "white")) {
+        alert("Xeque!");
+      }
+
+      turn = turn === "white" ? "black" : "white";
+      clearHighlights();
+      createBoard();
+      // Chama IA se for a vez das pretas
+      if (turn === "black") {
+        setTimeout(aiMove, 300);
+      }
+      const captured = initialBoard[row][col] !== "";
+      addMoveToHistory(fromRow, fromCol, row, col, movingPiece, captured);
+    } else {
+      selected = null;
+    }
+  } else {
+    // Seleciona peça do turno atual
+    if (piece && pieceColor === turn) {
+      selected = { row, col };
+      highlightValidMoves(row, col, piece);
+    }
+    else {
+        clearHighlights();
+    }
+  }
+}
+
+    function findKing(color) {
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+        const piece = initialBoard[r][c];
+        if (
+            (color === "white" && piece === "♔") ||
+            (color === "black" && piece === "♚")
+        ) {
+            return { row: r, col: c };
+        }
+        }
+    }
+    return null;
+    }
+
+    function highlightValidMoves(row, col, piece) {
+    clearHighlights();
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+        if (isValidMove(row, col, r, c, piece) && !wouldCauseCheck(row, col, r, c)) {
+            const index = r * 8 + c;
+            boardElement.children[index].classList.add("highlight");
+        }
+        }
+    }
+    }
+
+    function clearHighlights() {
+    [...boardElement.children].forEach(square => square.classList.remove("highlight"));
+    }
+
+    function isInCheck(color) {
+    const kingPos = findKing(color);
+    if (!kingPos) return true; // rei sumiu?
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+        const piece = initialBoard[r][c];
+        if (piece && getPieceColor(piece) !== color) {
+            if (isValidMove(r, c, kingPos.row, kingPos.col, piece)) {
+            return true;
+            }
+        }
+        }
+    }
+    return false;
+    }
+
+    function wouldCauseCheck(fromRow, fromCol, toRow, toCol) {
+        const backup = JSON.parse(JSON.stringify(initialBoard));
+        const piece = initialBoard[fromRow][fromCol];
+        initialBoard[toRow][toCol] = piece;
+        initialBoard[fromRow][fromCol] = "";
+        const inCheck = isInCheck(getPieceColor(piece));
+        initialBoard[fromRow][fromCol] = piece;
+        initialBoard[toRow][toCol] = backup[toRow][toCol];
+        return inCheck;
+    }
+
+    function isCheckmate(color) {
+    for (let r1 = 0; r1 < 8; r1++) {
+        for (let c1 = 0; c1 < 8; c1++) {
+        const piece = initialBoard[r1][c1];
+        if (piece && getPieceColor(piece) === color) {
+            for (let r2 = 0; r2 < 8; r2++) {
+            for (let c2 = 0; c2 < 8; c2++) {
+                if (isValidMove(r1, c1, r2, c2, piece) && !wouldCauseCheck(r1, c1, r2, c2)) {
+                return false; // existe pelo menos um movimento seguro
+                }
+            }
+            }
+        }
+        }
+    }
+    return true; // nenhum movimento possível que evite xeque
+    }
+
+    function promotePawn(row, col, color) {
+    pendingPromotion = { row, col, color };
+    modal.classList.remove("hidden");
+    }
+
+    modal.querySelectorAll("button").forEach(button => {
+    button.addEventListener("click", () => {
+        const choice = button.dataset.piece;
+        const { row, col, color } = pendingPromotion;
+
+        const whitePieces = {
+        dama: "♕",
+        torre: "♖",
+        bispo: "♗",
+        cavalo: "♘"
+        };
+
+        const blackPieces = {
+        dama: "♛",
+        torre: "♜",
+        bispo: "♝",
+        cavalo: "♞"
+        };
+
+        const piece = color === "white" ? whitePieces[choice] : blackPieces[choice];
+        initialBoard[row][col] = piece;
+        modal.classList.add("hidden");
+        pendingPromotion = null;
+        createBoard(); // atualiza o tabuleiro com a peça promovida
+    });
+    });
+
+    function getAllValidMoves(color) {
+    const moves = [];
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+        const piece = initialBoard[r][c];
+        if (piece && getPieceColor(piece) === color) {
+            for (let dr = 0; dr < 8; dr++) {
+            for (let dc = 0; dc < 8; dc++) {
+                if (isValidMove(r, c, dr, dc, piece)) {
+                // simula o movimento
+                const backup = initialBoard[dr][dc];
+                initialBoard[dr][dc] = piece;
+                initialBoard[r][c] = "";
+                const kingSafe = !isInCheck(color);
+                // desfaz simulação
+                initialBoard[r][c] = piece;
+                initialBoard[dr][dc] = backup;
+
+                if (kingSafe) {
+                    moves.push({ fromRow: r, fromCol: c, toRow: dr, toCol: dc });
+                }
+                }
+            }
+            }
+        }
+        }
+    }
+    return moves;
+    }
+
+    let aiDifficulty = "normal"; // "easy", "normal", "hard"
+
+    function aiMove() {
+    if (aiDifficulty === "easy") {
+        aiEasyMove();
+    } else if (aiDifficulty === "normal") {
+        aiNormalMove();
+    } else {
+        aiHardMove();
+    }
+    }
+
+    function aiEasyMove() {
+    const moves = getAllValidMoves("black");
+    const move = moves[Math.floor(Math.random() * moves.length)];
+    if (move) {
+        handleClick(move.fromRow, move.fromCol);
+        setTimeout(() => handleClick(move.toRow, move.toCol), 200);
+    }
+    }
+
+    function aiNormalMove() {
+    const moves = getAllValidMoves("black");
+    let bestScore = -Infinity;
+    let bestMoves = [];
+
+    for (const move of moves) {
+        const target = initialBoard[move.toRow][move.toCol];
+        let score = target ? getPieceValue(target) : 0;
+
+        if (score > bestScore) {
+        bestScore = score;
+        bestMoves = [move];
+        } else if (score === bestScore) {
+        bestMoves.push(move);
+        }
+    }
+
+    const move = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+    if (move) {
+        handleClick(move.fromRow, move.fromCol);
+        setTimeout(() => handleClick(move.toRow, move.toCol), 200);
+    }
+    }
+
+    function aiHardMove() {
+    const possibleMoves = getAllValidMoves("black");
+    let bestScore = -Infinity;
+    let bestMoves = [];
+
+    for (const move of possibleMoves) {
+        const { fromRow, fromCol, toRow, toCol } = move;
+        const piece = initialBoard[fromRow][fromCol];
+        const captured = initialBoard[toRow][toCol];
+
+        // Salva o estado atual
+        const tempFrom = initialBoard[fromRow][fromCol];
+        const tempTo = initialBoard[toRow][toCol];
+
+        // Simula o movimento
+        initialBoard[toRow][toCol] = tempFrom;
+        initialBoard[fromRow][fromCol] = "";
+
+        let score = 0;
+
+        // Evita colocar o próprio rei em xeque
+        if (wouldCauseCheck(fromRow, fromCol, toRow, toCol)) {
+        score = -Infinity;
+        } else {
+        // Valor da peça capturada
+        if (captured) {
+            score += getPieceValue(captured);
+        }
+
+        // Se for xeque-mate, prioriza totalmente
+        if (isCheckmate("white")) {
+            score = Infinity;
+        }
+
+        // Penaliza se ficar em xeque após o movimento
+        if (isInCheck("black")) {
+            score -= 5;
+        }
+        }
+
+        // Restaura o tabuleiro original
+        initialBoard[fromRow][fromCol] = tempFrom;
+        initialBoard[toRow][toCol] = tempTo;
+
+        // Atualiza melhor jogada
+        if (score > bestScore) {
+        bestScore = score;
+        bestMoves = [move];
+        } else if (score === bestScore) {
+        bestMoves.push(move);
+        }
+    }
+
+    // Escolhe uma das melhores jogadas aleatoriamente
+    const chosenMove = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+    if (!chosenMove) return;
+
+    handleClick(chosenMove.fromRow, chosenMove.fromCol);
+    setTimeout(() => handleClick(chosenMove.toRow, chosenMove.toCol), 200);
+    }
+
+    function getPieceValue(piece) {
+    switch (piece) {
+        case "♙": case "♟": return 1;
+        case "♘": case "♞": return 3;
+        case "♗": case "♝": return 3;
+        case "♖": case "♜": return 5;
+        case "♕": case "♛": return 9;
+        case "♔": case "♚": return 1000;
+        default: return 0;
+    }
+    }
+
+  createBoard();
+
+  restart = document.getElementById('restart')
+  restart.addEventListener('click', () => {
+    location.reload();
+  })
+</script>
+</body>
+</html>

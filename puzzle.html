@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Quebra-Cabeça</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 20px;
+      background-color: rgba(0, 0, 0, 0.541)
+    }
+
+    #menu {
+      margin-bottom: 20px;
+    }
+
+    #puzzle {
+      display: grid;
+      margin: 0 auto;
+      gap: 2px;
+      max-width: 90vmin;
+      max-height: 90vmin;
+    }
+
+    .piece {
+      background-size: cover;
+      cursor: pointer;
+      border: 1px solid #999;
+      transition: transform 0.2s ease;
+      aspect-ratio: 1/1;
+      min-height: 50px;
+    }
+
+    .piece:hover {
+      transform: scale(1.05);
+    }
+
+    .hidden {
+      background: #eee;
+      border: none;
+      cursor: default;
+    }
+
+    .piece.hidden {
+     background-color: #ff0000;
+     background-image: none !important;
+     border: 1px solid #999;
+    }
+
+    #info {
+      margin-top: 10px;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    label[for="upload"] {
+      background: #007bff;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #preview-container {
+    margin-top: 20px;
+    }
+
+    #preview {
+    max-width: 200px;
+    border: 1px solid #999;
+    box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    cursor: pointer;
+    }
+
+    @media (min-width: 700px) {
+    #puzzle {
+        float: left;
+        margin-right: 30px;
+    }
+    #preview-container {
+        float: left;
+        text-align: left;
+    }
+    }
+
+    button {
+      margin-left: 10px;
+      padding: 6px 12px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    padding-top: 60px;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.8);
+    }
+
+    .modal-conteudo {
+    margin: auto;
+    display: block;
+    max-width: 90%;
+    max-height: 80vh;
+    box-shadow: 0 0 10px #fff;
+    animation: zoomIn 0.3s ease;
+    }
+
+    @keyframes zoomIn {
+    from {transform: scale(0.5); opacity: 0;}
+    to {transform: scale(1); opacity: 1;}
+    }
+
+    .fechar {
+    position: absolute;
+    top: 20px;
+    right: 35px;
+    color: #fff;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+    }
+
+    .fechar:hover {
+    color: #bbb;
+    }
+
+    @media (max-width: 600px) {
+      #menu {
+        font-size: 14px;
+      }
+      button, label[for="upload"] {
+        padding: 5px 10px;
+      }
+    }
+
+    body.dark-mode {
+    background-color: #121212;
+    color: #f0f0f0;
+    }
+
+    .dark-mode #puzzle .piece {
+    border-color: #555;
+    }
+
+    .dark-mode .piece.hidden {
+    background-color: #48ff00;
+    }
+
+    .dark-mode label[for="upload"],
+    .dark-mode button,
+    .dark-mode select {
+    background-color: #333;
+    color: white;
+    border: none;
+    }
+
+    .dark-mode #preview {
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+    }
+
+
+  </style>
+</head>
+<body>
+  <h1>Quebra-Cabeça</h1>
+
+  <div id="menu">
+    <label>Dificuldade: </label>
+    <select id="dificuldade" onchange="iniciarJogo()">
+      <option value="2">2x2</option>
+      <option value="3">3x3</option>
+      <option value="4">4x4</option>
+      <option value="5">5x5</option>
+      <option value="6">6x6</option>
+      <option value="7">7x7</option>
+      <option value="8">8x8</option>
+      <option value="9">9x9</option>
+      <option value="10">10x10</option>
+    </select>
+
+    <label>Tempo limite:</label>
+      <select id="tempo-limite" onchange="iniciarJogo()">
+      <option value="0">Sem limite</option>
+      <option value="60">1 min</option>
+      <option value="120">2 min</option>
+      <option value="180">3 min</option>
+      <option value="240">4 min</option>
+      <option value="300">5 min</option>
+      <option value="360">6 min</option>
+      <option value="420">7 min</option>
+      <option value="480">8 min</option>
+      <option value="520">9 min</option>
+      <option value="600">10 min</option>
+    </select>
+
+    <audio id="musica" src="https://redirector.googlevideo.com/videoplayback?expire=1748971859&ei=89w-aKJ1n7-YsA-UtLmRDA&ip=176.6.132.46&id=o-AEMNmiar7SEyZ7pXVdmL1NL9LoZm2Zy6dl-CpVe0-CfP&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1748950259%2C&mh=Y_&mm=31%2C29&mn=sn-uxax4vopj5qx-cxge%2Csn-4g5ednds&ms=au%2Crdu&mv=m&mvi=4&pl=27&rms=au%2Cau&initcwndbps=1032500&bui=AY1jyLOMcuXj12jVj2L4feS3MzbbVKv508wGE7-EcgAgHZo4FXhBjCpfBkTWe0eNxHpoDQwRHAw6RD5D&spc=l3OVKWuMfgTEWVXRh8w0N6oAaYSWZepWjYMgaoUWYAMJvf6M3z4pIwc&vprv=1&svpuc=1&mime=video%2Fmp4&ns=l1OsTncwBp3yi_Yrfs3OKHIQ&rqh=1&cnr=14&ratebypass=yes&dur=176.309&lmt=1708750099293506&mt=1748949914&fvip=1&fexp=51331020%2C51466643%2C51466697&c=MWEB&sefc=1&txp=4538434&n=V-ERwMjFd8R-Mw&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Ccnr%2Cratebypass%2Cdur%2Clmt&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgI01FOfXeTS8xolDD-9rputiuogcRpfdfROMMMjIFeSYCIBMEnT2MGdko2ZUUC7Pb1lnm2_2-uQQKKISvt8KLNcMJ&sig=AJfQdSswRAIgeSOC5KZBB2QSR39X0N9j2WO6PAEmzzmhMOiF2124dB8CIEm4yodSnqPO0Ze_BySGiIR0VAzg-3rKliaVvZgFiw77&pot=MnQGQRxp9Boq9wZ99neH3Epa9sIDZRKXrYKxlv7jiPxWku7MfMLIr7nJ9Qy7i6lj345zLZkJBCwHWV-7OvyYmTu_R39rWveFQ-OhU4RawPg6stsYlnc7fMOFiEKycaewniNn9ta9w0cg_e_dLSP0IHSBBqrpaQ==" autoplay loop></audio>
+    <button id="playPause" class="glow-on-hover">Play/Pause Música</button>
+    <button id="toggle-tema" onclick="alternarTema()">🌙</button>
+    <button onclick="imagemSurpresa()">🔀 Imagem Surpresa</button>
+
+    <label for="upload">Imagem</label>
+    <input type="file" id="upload" accept="image/*" onchange="carregarImagem(event)">
+
+    <button onclick="confirmarEmbaralhar()">Embaralhar</button>
+    <button id="restart">Recomeçar</button>
+    <a href="./index.html" class="voltar">Voltar</a>
+  </div>
+
+  <div id="puzzle"></div>
+
+  <div id="preview-container">
+  <p><strong>Pré-visualização:</strong></p>
+  <img id="preview" src="" alt="Miniatura da imagem" />
+  </div>
+  <div id="modal" class="modal">
+  <span class="fechar" onclick="fecharModal()">&times;</span>
+  <img class="modal-conteudo" id="imagemAmpliada">
+  </div>
+
+  <div id="info">
+    <p><strong>Movimentos:</strong> <span id="movimentos">0</span></p>
+    <p><strong>Tempo:</strong> <span id="tempo">00:00</span></p>
+  </div>
+
+  <script>
+    let gridSize = 3;
+    let ordem = [];
+    let movimentos = 0;
+    let tempo = 0;
+    let cronometro = null;
+    let tempoLimite = 0;
+    const imagensSurpresa = [
+  "https://i.imgur.com/1bX5QH6.jpg",
+  "https://picsum.photos/400?random=1",
+  "https://picsum.photos/400?random=2",
+  "https://picsum.photos/400?random=3",
+  "https://picsum.photos/400?random=4",
+  "https://images.unsplash.com/photo-1526045612212-70caf35c14df?auto=format&fit=crop&w=400&q=80"
+];
+    let imagemBase = 'https://i.imgur.com/1bX5QH6.jpg';
+
+    const puzzle = document.getElementById("puzzle");
+    const movimentosSpan = document.getElementById("movimentos");
+    const tempoSpan = document.getElementById("tempo");
+
+    document.getElementById("preview").onclick = function () {
+    document.getElementById("imagemAmpliada").src = imagemBase;
+    document.getElementById("modal").style.display = "block";
+    };
+
+    function fecharModal() {
+    document.getElementById("modal").style.display = "none";
+    }
+
+    // Fechar o modal clicando fora da imagem
+    window.onclick = function(event) {
+    const modal = document.getElementById("modal");
+    if (event.target === modal) {
+        modal.style.display = "none";
+    }
+    };
+
+    function alternarTema() {
+    document.body.classList.toggle('dark-mode');
+    const temaAtual = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+    localStorage.setItem('tema', temaAtual);
+    atualizarIconeTema();
+    }
+
+    function carregarTemaSalvo() {
+    const temaSalvo = localStorage.getItem('tema');
+    if (temaSalvo === 'dark') {
+        document.body.classList.add('dark-mode');
+    }
+    atualizarIconeTema();
+    }
+
+    function atualizarIconeTema() {
+    const botao = document.getElementById('toggle-tema');
+    botao.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
+    }
+
+    carregarTemaSalvo();
+
+    function iniciarJogo() {
+      gridSize = parseInt(document.getElementById("dificuldade").value);
+      ordem = [];
+      movimentos = 0;
+      tempo = 0;
+      clearInterval(cronometro);
+      atualizarTempo();
+      criarPecas();
+      document.getElementById("preview").src = imagemBase;
+      tempoLimite = parseInt(document.getElementById("tempo-limite").value);
+      tempo = tempoLimite > 0 ? tempoLimite : 0;
+      window.onload = iniciarJogo;
+    }
+
+    function criarPecas() {
+      puzzle.innerHTML = "";
+      puzzle.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+      puzzle.style.gridTemplateRows = `repeat(${gridSize}, 1fr)`;
+      const total = gridSize * gridSize;
+
+      for (let i = 0; i < total; i++) {
+        const div = document.createElement("div");
+        div.className = "piece";
+        if (i === total - 1) {
+          div.classList.add("hidden");
+        } else {
+        const x = (i % gridSize) * 100 / (gridSize - 1);
+        const y = Math.floor(i / gridSize) * 100 / (gridSize - 1);
+        div.style.backgroundImage = `url(${imagemBase})`;
+        div.style.backgroundSize = `${gridSize * 100}% ${gridSize * 100}%`;
+        div.style.backgroundPosition = `${x}% ${y}%`;
+        }
+        div.dataset.index = i;
+        div.onclick = () => moverPeca(i);
+        ordem[i] = i;
+        puzzle.appendChild(div);
+      }
+      atualizarContadores();
+    }
+
+    function moverPeca(i) {
+        const posVazia = ordem.indexOf(ordem.length - 1);
+        const linha = Math.floor(i / gridSize);
+        const coluna = i % gridSize;
+        const linhaV = Math.floor(posVazia / gridSize);
+        const colunaV = posVazia % gridSize;
+
+        if ((linha === linhaV && Math.abs(coluna - colunaV) === 1) ||
+            (coluna === colunaV && Math.abs(linha - linhaV) === 1)) {
+            [ordem[i], ordem[posVazia]] = [ordem[posVazia], ordem[i]];
+            movimentos++;
+            if (movimentos === 1) iniciarCronometro();
+            atualizarPuzzle();
+            atualizarContadores();
+            if (verificarVitoria()) {
+            clearInterval(cronometro);
+            dispararConfetes();
+            tocarSomVitoria();
+            setTimeout(() => {
+                atualizarPuzzle(true); // 👈 exibe a imagem completa
+                alert(`Parabéns! Você venceu com ${movimentos} movimentos em ${formatarTempo(tempo)}!`);
+            }, 200);
+            }
+        }
+    }
+
+    function atualizarPuzzle(mostrarCompleto = false) {
+        const pecas = puzzle.children;
+        for (let i = 0; i < ordem.length; i++) {
+        const idx = ordem[i];
+        const div = pecas[i];
+        if (idx === ordem.length - 1 && !mostrarCompleto) {
+        div.className = "piece hidden";
+        div.style.backgroundImage = "";
+        div.style.backgroundPosition = "";
+        } else {
+        div.className = "piece";
+        const x = (idx % gridSize) * 100 / (gridSize - 1);
+        const y = Math.floor(idx / gridSize) * 100 / (gridSize - 1);
+        div.style.backgroundImage = `url(${imagemBase})`;
+        div.style.backgroundSize = `${gridSize * 100}% ${gridSize * 100}%`;
+        div.style.backgroundPosition = `${x}% ${y}%`;
+        }
+    }
+    }
+
+    function confirmarEmbaralhar() {
+      if (movimentos > 0) {
+        if (!confirm("Tem certeza de que deseja reiniciar o jogo atual?")) return;
+      }
+      embaralhar();
+    }
+
+    function embaralhar() {
+      do {
+        ordem = ordem.map((_, i) => i).sort(() => Math.random() - 0.5);
+      } while (!solucionavel());
+      movimentos = 0;
+      tempo = 0;
+      clearInterval(cronometro);
+      atualizarContadores();
+      atualizarTempo();
+      atualizarPuzzle();
+      tempoLimite = parseInt(document.getElementById("tempo-limite").value);
+      tempo = tempoLimite > 0 ? tempoLimite : 0;
+      window.onload = iniciarJogo;
+    }
+
+    function solucionavel() {
+      const arr = ordem.slice();
+      let inversoes = 0;
+      for (let i = 0; i < arr.length; i++) {
+        for (let j = i + 1; j < arr.length; j++) {
+          if (arr[i] !== arr.length - 1 && arr[j] !== arr.length - 1 && arr[i] > arr[j]) {
+            inversoes++;
+          }
+        }
+      }
+      if (gridSize % 2 !== 0) {
+        return inversoes % 2 === 0;
+      } else {
+        const linhaVazia = Math.floor(ordem.indexOf(arr.length - 1) / gridSize);
+        return (inversoes + linhaVazia) % 2 === 1;
+      }
+    }
+
+    function verificarVitoria() {
+  return ordem.every((val, idx) => val === idx);
+  }
+
+    function atualizarContadores() {
+      movimentosSpan.textContent = movimentos;
+    }
+    function iniciarCronometro() {
+    cronometro = setInterval(() => {
+        if (tempoLimite > 0) {
+        tempo--;
+        if (tempo <= 0) {
+            clearInterval(cronometro);
+            tempo = 0;
+            atualizarTempo();
+            bloquearJogo();
+            alert("⏱ Tempo esgotado! Tente novamente.");
+            return;
+        }
+        } else {
+        tempo++; // modo sem limite: conta pra cima
+        }
+        atualizarTempo();
+    }, 1000);
+    }
+
+    function atualizarTempo() {
+      tempoSpan.textContent = formatarTempo(tempo);
+    }
+
+    function formatarTempo(seg) {
+    const min = String(Math.floor(seg / 60)).padStart(2, '0');
+    const s = String(Math.max(seg % 60, 0)).padStart(2, '0');
+    return `${min}:${s}`;
+    }
+
+    function carregarImagem(event) {
+      const arquivo = event.target.files[0];
+      if (!arquivo) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        imagemBase = e.target.result;
+        iniciarJogo();
+      };
+      reader.readAsDataURL(arquivo);
+    }
+
+    function dispararConfetes() {
+    const duration = 3 * 1000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 1000 };
+
+    const interval = setInterval(function () {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+        clearInterval(interval);
+        return;
+        }
+
+        const particleCount = 50 * (timeLeft / duration);
+        confetti(Object.assign({}, defaults, {
+        particleCount,
+        origin: { x: Math.random(), y: Math.random() * 0.6 }
+        }));
+    }, 250);
+    }
+
+    function imagemSurpresa() {
+    const aleatoria = imagensSurpresa[Math.floor(Math.random() * imagensSurpresa.length)];
+    imagemBase = aleatoria;
+    iniciarJogo();
+    }
+
+    function bloquearJogo() {
+    const pecas = document.querySelectorAll(".piece");
+    pecas.forEach(p => p.onclick = null);
+    }
+
+    const playPauseBtn = document.getElementById('playPause');
+    const musica = document.getElementById('musica');
+
+    playPauseBtn.addEventListener('click', () => {
+        if (musica.paused) {
+            musica.play();
+        } else {
+            musica.pause();
+        }
+    });
+
+    iniciarJogo();
+
+    restart = document.getElementById('restart')
+    restart.addEventListener('click', () => {
+      location.reload();
+    })
+  </script>
+</body>
+</html>
